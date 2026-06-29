@@ -934,8 +934,16 @@
       "Sword of the Spirit": "What Scripture do I need to speak out loud right now?"
     };
 
-    const questions = [
-      { circle: "Accountability", type: "single", key: "status", required: true, text: "Before we go further: have you already watched porn today?", choices: ["No - I am fighting the urge", "Yes - I watched porn"] },
+    const statusQuestion = {
+      circle: "Choose Your Path",
+      type: "single",
+      key: "status",
+      required: true,
+      text: "Before we go further: have you already watched porn today?",
+      choices: ["No - I am fighting the urge", "Yes - I watched porn"]
+    };
+
+    const proactiveQuestions = [
       { circle: "Inner Circle", type: "range", key: "urge", text: "How strong is the urge right now?" },
       { circle: "Inner Circle", type: "choices", key: "risk", text: "If the urge takes over, what are you most likely to do next?", choices: ["Open porn or sexual content", "Search for suggestive content", "Stay in a sexual fantasy", "Message someone sexually", "Masturbate", "I am not sure"] },
       { circle: "Inner Circle", type: "text", key: "sixty", text: "What do you need to do in the next 60 seconds?" },
@@ -948,9 +956,18 @@
       { circle: "Next Faithful Step", type: "choices", key: "step", text: "Choose one action now.", choices: ["Leave the room", "Text an ally", "Pray out loud", "Take a walk", "Put the phone away", "Read Ephesians 6"] }
     ];
 
+    const reactiveQuestions = [
+      { circle: "Make It Safe", type: "single", key: "safety", required: true, text: "Is the content closed and the device moved to a safer place?", choices: ["Yes - the environment is safer", "Not yet - I will do that now"] },
+      { circle: "Name the Trigger", type: "choices", key: "trigger", text: "What was happening before the relapse?", choices: ["Boredom", "High anxiety", "Marital conflict", "Loneliness", "Tiredness", "Stress", "I am not sure"] },
+      { circle: "Name the Emotion", type: "choices", key: "body", text: "What are you feeling right now?", choices: ["Ashamed", "Anxious", "Numb", "Angry", "Lonely", "Sad", "Relieved"] },
+      { circle: "Next 60 Seconds", type: "text", key: "sixty", text: "What will make the next 60 seconds safer?" },
+      { circle: "Bring It Into the Light", type: "single", key: "step", required: true, text: "What accountability action will you take now?", choices: ["Text a battle buddy", "Call a battle buddy", "Tell my spouse", "Contact my pastor or sponsor", "Move to a shared space"] }
+    ];
+
     let state = load();
     let activeView = "homeView";
     let questionIndex = 0;
+    let flowQuestions = [statusQuestion];
     let currentAnswers = {};
     let selectedArmor = "Belt of Truth";
 
@@ -988,19 +1005,20 @@
 
     function startFlow() {
       questionIndex = 0;
+      flowQuestions = [statusQuestion];
       currentAnswers = { startedAt: new Date().toISOString() };
       navigate("struggleView");
       renderQuestion();
     }
 
     function renderQuestion() {
-      const q = questions[questionIndex];
-      $("#flowProgress").style.width = `${((questionIndex + 1) / questions.length) * 100}%`;
+      const q = flowQuestions[questionIndex];
+      $("#flowProgress").style.width = `${((questionIndex + 1) / flowQuestions.length) * 100}%`;
       $("#circleLabel").textContent = q.circle;
       $("#questionText").textContent = q.text;
       $("#validationMessage").textContent = "";
       $("#backQuestion").disabled = questionIndex === 0;
-      $("#nextQuestion").textContent = questionIndex === questions.length - 1 ? "Finish" : "Next";
+      $("#nextQuestion").textContent = questionIndex === flowQuestions.length - 1 ? "Finish" : "Next";
       const slot = $("#answerSlot");
       slot.innerHTML = "";
 
@@ -1071,11 +1089,25 @@
     }
 
     function canAdvance() {
-      const q = questions[questionIndex];
+      const q = flowQuestions[questionIndex];
       if (!q.required) return true;
       const value = currentAnswers[q.key];
       if (Array.isArray(value)) return value.length > 0;
       return Boolean(value);
+    }
+
+    function selectFlow() {
+      const flowType = currentAnswers.status === "Yes - I watched porn" ? "Reactive" : "Proactive";
+      if (currentAnswers.flowType && currentAnswers.flowType !== flowType) {
+        currentAnswers = {
+          startedAt: currentAnswers.startedAt,
+          status: currentAnswers.status,
+          flowType
+        };
+      } else {
+        currentAnswers.flowType = flowType;
+      }
+      flowQuestions = [statusQuestion, ...(flowType === "Reactive" ? reactiveQuestions : proactiveQuestions)];
     }
 
     function finishFlow() {
@@ -1083,7 +1115,7 @@
       const entry = {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
-        type: watchedPorn ? "Reactive" : "Proactive",
+        type: currentAnswers.flowType || (watchedPorn ? "Reactive" : "Proactive"),
         watchedPorn,
         answers: currentAnswers
       };
@@ -1263,8 +1295,8 @@
       state.entries.forEach((entry) => {
         const status = entry.watchedPorn ? "Watched porn" : "Fighting urge";
         counts[status] = (counts[status] || 0) + 1;
-        ["risk", "body", "pressure", "armor", "step"].forEach((key) => {
-          (entry.answers[key] || []).forEach((value) => {
+        ["risk", "trigger", "body", "pressure", "armor", "step"].forEach((key) => {
+          answerValues(entry.answers[key]).forEach((value) => {
             counts[value] = (counts[value] || 0) + 1;
           });
         });
@@ -1280,16 +1312,15 @@
       history.innerHTML = state.entries.map((entry) => {
         const a = entry.answers;
         const watchedPorn = entry.watchedPorn ?? a.status === "Yes - I watched porn";
-        const tagBits = [watchedPorn ? "Reactive: watched porn" : "Proactive: fighting urge", ...(a.risk || []), ...(a.body || []), ...(a.pressure || []), ...(a.armor || [])].slice(0, 7);
-        return `
-          <article class="entry">
-            <header>
-              <strong>${watchedPorn ? "Reactive check-in" : "Proactive check-in"}</strong>
-              <span class="small">${formatDate(entry.createdAt)}</span>
-            </header>
-            <div class="tags">${tagBits.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
-            <div class="detail-list">
-              <div class="detail-item"><span>Accountability</span><strong>${watchedPorn ? "Watched porn today" : "Fighting the urge"}</strong></div>
+        const usesReactiveFlow = a.flowType === "Reactive";
+        const tagBits = [watchedPorn ? "Reactive: watched porn" : "Proactive: fighting urge", ...answerValues(a.trigger), ...answerValues(a.risk), ...answerValues(a.body), ...answerValues(a.pressure), ...answerValues(a.armor)].slice(0, 7);
+        const details = usesReactiveFlow ? `
+              ${answerDetail("Immediate safety", a.safety)}
+              ${answerDetail("Trigger before relapse", a.trigger)}
+              ${answerDetail("Current emotion", a.body)}
+              ${answerDetail("Next 60 seconds", a.sixty)}
+              ${answerDetail("Accountability action", a.step)}
+            ` : `
               ${answerDetail("Urge level", a.urge)}
               ${answerDetail("Immediate risk", a.risk)}
               ${answerDetail("Next 60 seconds", a.sixty)}
@@ -1300,6 +1331,17 @@
               ${answerDetail("Weak armor", a.armor)}
               ${answerDetail("Lie named", a.lie)}
               ${answerDetail("Next faithful step", a.step)}
+            `;
+        return `
+          <article class="entry">
+            <header>
+              <strong>${watchedPorn ? "Reactive check-in" : "Proactive check-in"}</strong>
+              <span class="small">${formatDate(entry.createdAt)}</span>
+            </header>
+            <div class="tags">${tagBits.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
+            <div class="detail-list">
+              <div class="detail-item"><span>Accountability</span><strong>${watchedPorn ? "Watched porn today" : "Fighting the urge"}</strong></div>
+              ${details}
             </div>
           </article>
         `;
@@ -1309,6 +1351,11 @@
     function answerDetail(label, value) {
       const text = Array.isArray(value) ? value.join(", ") : value;
       return `<div class="detail-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(text || "Not recorded")}</strong></div>`;
+    }
+
+    function answerValues(value) {
+      if (Array.isArray(value)) return value;
+      return value ? [value] : [];
     }
 
     function escapeHtml(value) {
@@ -1329,10 +1376,13 @@
     });
     $("#nextQuestion").addEventListener("click", () => {
       if (!canAdvance()) {
-        $("#validationMessage").textContent = "Choose one before moving on. This field keeps the record honest.";
+        $("#validationMessage").textContent = questionIndex === 0
+          ? "Choose one so the app can guide the right next step."
+          : "Choose one before moving on.";
         return;
       }
-      if (questionIndex === questions.length - 1) finishFlow();
+      if (questionIndex === 0) selectFlow();
+      if (questionIndex === flowQuestions.length - 1) finishFlow();
       else {
         questionIndex += 1;
         renderQuestion();
