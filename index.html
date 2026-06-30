@@ -500,6 +500,41 @@
       border: 1px solid var(--line);
     }
 
+    .armor-guide {
+      display: grid;
+      gap: 7px;
+    }
+
+    .armor-guide-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(108px, 0.8fr) 1.6fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(34,36,27,0.72);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .armor-guide-item strong {
+      color: var(--gold-2);
+      font-size: 0.82rem;
+    }
+
+    .armor-guide-item em {
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+
+    .armor-guide-item.active {
+      border-color: rgba(242,208,118,0.55);
+      background: rgba(209,161,59,0.13);
+    }
+
     .entry {
       padding: 14px;
       margin-bottom: 10px;
@@ -746,9 +781,60 @@
       grid-column: 1 / -1;
     }
 
-    .history-summary {
-      margin-top: 10px;
-      padding: 0 12px;
+    .history-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .history-row {
+      width: 100%;
+      min-height: 76px;
+      display: grid;
+      grid-template-columns: 68px 1fr 20px;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(34,36,27,0.88);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .history-row:hover,
+    .history-row:focus-visible {
+      border-color: rgba(242,208,118,0.45);
+      background: rgba(46,49,37,0.96);
+    }
+
+    .history-date,
+    .history-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .history-date {
+      padding-right: 10px;
+      border-right: 1px solid var(--line);
+    }
+
+    .history-date strong,
+    .history-copy strong {
+      font-size: 0.94rem;
+    }
+
+    .history-date span,
+    .history-copy span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .history-chevron {
+      color: var(--gold-2);
+      font-size: 1.45rem;
+      line-height: 1;
+      text-align: right;
     }
 
     .validation {
@@ -956,6 +1042,32 @@
             <button class="armor-hotspot hot-sword" data-armor="Sword of the Spirit">Sword</button>
           </div>
         </div>
+        <div class="armor-guide" aria-label="Armor applications">
+          <button class="armor-guide-item" type="button" data-armor="Belt of Truth">
+            <strong>Belt of Truth</strong>
+            <em>Name the lie: “Porn will make this feeling better.”</em>
+          </button>
+          <button class="armor-guide-item" type="button" data-armor="Breastplate of Righteousness">
+            <strong>Breastplate</strong>
+            <em>Choose integrity after failure instead of hiding in shame.</em>
+          </button>
+          <button class="armor-guide-item" type="button" data-armor="Shoes of Peace">
+            <strong>Shoes of Peace</strong>
+            <em>Leave isolation and move toward a safe person or place.</em>
+          </button>
+          <button class="armor-guide-item" type="button" data-armor="Shield of Faith">
+            <strong>Shield of Faith</strong>
+            <em>Trust that the urge is temporary and does not have to command you.</em>
+          </button>
+          <button class="armor-guide-item" type="button" data-armor="Helmet of Salvation">
+            <strong>Helmet</strong>
+            <em>Remember that temptation or relapse does not define your identity.</em>
+          </button>
+          <button class="armor-guide-item" type="button" data-armor="Sword of the Spirit">
+            <strong>Sword</strong>
+            <em>Speak a specific Scripture aloud when fantasy begins.</em>
+          </button>
+        </div>
         <div class="armor-detail">
           <h3 id="armorTitle">Belt of Truth</h3>
           <p id="armorPrompt">What lie am I believing right now, and what truth do I need to stand in?</p>
@@ -1018,11 +1130,7 @@
     <section class="view" id="historyView">
       <div class="screen-title">
         <h2>History</h2>
-        <p>Look for patterns without shame. Patterns are clues.</p>
-      </div>
-      <div class="card">
-        <h3>Recent signals</h3>
-        <div class="tags" id="patternTags"></div>
+        <p>Open a session to review its report.</p>
       </div>
       <div id="historyEntries"></div>
     </section>
@@ -1377,7 +1485,11 @@
       selectedArmor = piece;
       $("#armorTitle").textContent = piece;
       $("#armorPrompt").textContent = prompts[piece];
-      $$(".armor-hotspot").forEach((button) => button.classList.toggle("active", button.dataset.armor === piece));
+      $$("[data-armor]").forEach((button) => {
+        const active = button.dataset.armor === piece;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
     }
 
     function openArmorJournal() {
@@ -1569,6 +1681,10 @@
       return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" });
     }
 
+    function formatTimeShort(value) {
+      return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
     function phoneHref(value) {
       return String(value).replace(/[^\d+]/g, "");
     }
@@ -1638,61 +1754,32 @@
 
     function renderHistory() {
       const history = $("#historyEntries");
-      const tags = $("#patternTags");
-      const counts = {};
-      state.entries.forEach((entry) => {
-        const status = entry.watchedPorn ? "Watched porn" : "Fighting urge";
-        counts[status] = (counts[status] || 0) + 1;
-        ["risk", "trigger", "body", "pressure", "armor", "step"].forEach((key) => {
-          answerValues(entry.answers[key]).forEach((value) => {
-            counts[value] = (counts[value] || 0) + 1;
-          });
-        });
-      });
-      const topTags = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      tags.innerHTML = topTags.length ? topTags.map(([tag, count]) => `<span class="tag">${tag} · ${count}</span>`).join("") : '<span class="small">No patterns yet.</span>';
-
       if (!state.entries.length) {
         history.innerHTML = '<div class="entry"><p>No struggle entries yet. Use the main button when you need to interrupt the cycle.</p></div>';
         return;
       }
 
+      history.className = "history-list";
       history.innerHTML = state.entries.map((entry) => {
         const a = entry.answers;
         const watchedPorn = entry.watchedPorn ?? a.status === "Yes - I watched porn";
-        const usesReactiveFlow = a.flowType === "Reactive";
-        const tagBits = [watchedPorn ? "Reactive: watched porn" : "Proactive: fighting urge", ...answerValues(a.trigger), ...answerValues(a.risk), ...answerValues(a.body), ...answerValues(a.pressure), ...answerValues(a.armor)].slice(0, 7);
-        const details = usesReactiveFlow ? `
-              ${answerDetail("Immediate safety", a.safety)}
-              ${answerDetail("Trigger before relapse", a.trigger)}
-              ${answerDetail("Current emotion", a.body)}
-              ${answerDetail("Next 60 seconds", a.sixty)}
-              ${answerDetail("Accountability action", a.step)}
-            ` : `
-              ${answerDetail("Urge level", a.urge)}
-              ${answerDetail("Immediate risk", a.risk)}
-              ${answerDetail("Next 60 seconds", a.sixty)}
-              ${answerDetail("Body / emotion", a.body)}
-              ${answerDetail("Last hour", a.recent)}
-              ${answerDetail("Long-term pressure", a.pressure)}
-              ${answerDetail("Avoiding", a.avoid)}
-              ${answerDetail("Weak armor", a.armor)}
-              ${answerDetail("Lie named", a.lie)}
-              ${answerDetail("Next faithful step", a.step)}
-            `;
+        const actions = entry.summary?.actions || [];
+        const completed = actions.filter((action) => action.done).length;
+        const actionStatus = actions.length
+          ? `${completed} of ${actions.length} actions complete`
+          : "Open session report";
         return `
-          <article class="entry">
-            <header>
-              <strong>${watchedPorn ? "Reactive check-in" : "Proactive check-in"}</strong>
-              <span class="small">${formatDate(entry.createdAt)}</span>
-            </header>
-            <div class="tags">${tagBits.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
-            <div class="detail-list">
-              <div class="detail-item"><span>Accountability</span><strong>${watchedPorn ? "Watched porn today" : "Fighting the urge"}</strong></div>
-              ${details}
-            </div>
-            <button class="link-button history-summary" type="button" data-view-summary="${entry.id}">View Summary</button>
-          </article>
+          <button class="history-row" type="button" data-view-summary="${entry.id}" aria-label="Open ${watchedPorn ? "reactive" : "proactive"} session from ${formatDate(entry.createdAt)}">
+            <span class="history-date">
+              <strong>${formatDateShort(entry.createdAt)}</strong>
+              <span>${formatTimeShort(entry.createdAt)}</span>
+            </span>
+            <span class="history-copy">
+              <strong>${watchedPorn ? "Reactive session" : "Proactive session"}</strong>
+              <span>${actionStatus}</span>
+            </span>
+            <span class="history-chevron" aria-hidden="true">›</span>
+          </button>
         `;
       }).join("");
       $$("[data-view-summary]").forEach((button) => {
@@ -1740,7 +1827,7 @@
         renderQuestion();
       }
     });
-    $$(".armor-hotspot").forEach((button) => button.addEventListener("click", () => setArmor(button.dataset.armor)));
+    $$("[data-armor]").forEach((button) => button.addEventListener("click", () => setArmor(button.dataset.armor)));
     $("#journalArmor").addEventListener("click", openArmorJournal);
     $("#saveJournal").addEventListener("click", saveJournal);
     $("#summaryPrimary").addEventListener("click", runSummaryPrimaryAction);
