@@ -663,6 +663,94 @@
       letter-spacing: 0.04em;
     }
 
+    .summary-stack,
+    .reading-list,
+    .action-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .summary-mode {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 6px 9px;
+      border-radius: 8px;
+      background: rgba(108,163,122,0.16);
+      color: #cce7d2;
+      border: 1px solid rgba(108,163,122,0.28);
+      font-size: 0.78rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .summary-mode.reactive {
+      background: rgba(189,75,75,0.15);
+      color: #ffd4d4;
+      border-color: rgba(189,75,75,0.32);
+    }
+
+    .reading-item {
+      padding: 11px;
+      border-left: 3px solid var(--gold);
+      background: rgba(209,161,59,0.08);
+    }
+
+    .reading-item strong,
+    .reading-item span {
+      display: block;
+    }
+
+    .reading-item span {
+      color: var(--muted);
+      margin-top: 3px;
+      font-size: 0.86rem;
+    }
+
+    .prayer-text {
+      white-space: pre-line;
+      line-height: 1.65;
+      color: #efe7d2;
+    }
+
+    .action-check {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(244,240,230,0.08);
+    }
+
+    .action-check input {
+      width: 20px;
+      height: 20px;
+      margin: 1px 0 0;
+      accent-color: var(--green);
+    }
+
+    .action-check:has(input:checked) span {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
+    .summary-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .summary-actions .full-width {
+      grid-column: 1 / -1;
+    }
+
+    .history-summary {
+      margin-top: 10px;
+      padding: 0 12px;
+    }
+
     .validation {
       color: #ffd4d4;
       min-height: 22px;
@@ -685,6 +773,14 @@
       }
 
       .buddy-form .full-width {
+        grid-column: auto;
+      }
+
+      .summary-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-actions .full-width {
         grid-column: auto;
       }
     }
@@ -766,6 +862,38 @@
           <button class="plain-button" id="backQuestion" type="button">Back</button>
           <button class="plain-button gold" id="nextQuestion" type="button">Next</button>
         </div>
+      </div>
+    </section>
+
+    <section class="view" id="summaryView">
+      <div class="screen-title">
+        <span class="summary-mode" id="summaryMode">Proactive session</span>
+        <h2 style="margin-top: 10px;">Session Summary</h2>
+        <p id="summaryIntro">Hold onto what is true and take the next clear step.</p>
+      </div>
+      <div class="summary-stack">
+        <div class="card">
+          <h3>What you identified</h3>
+          <div class="detail-list" id="summaryResponses"></div>
+        </div>
+        <div class="card">
+          <h3>Recommended Bible reading</h3>
+          <div class="reading-list" id="summaryReadings"></div>
+        </div>
+        <div class="card">
+          <h3>A prayer for this moment</h3>
+          <p class="prayer-text" id="summaryPrayer"></p>
+        </div>
+        <div class="card">
+          <h3>Recommended actions</h3>
+          <div class="action-list" id="summaryActions"></div>
+        </div>
+        <div class="summary-actions">
+          <button class="plain-button green" id="summaryPrimary" type="button">Reach Out Now</button>
+          <button class="plain-button" id="copySummary" type="button">Copy Summary</button>
+          <button class="plain-button gold full-width" id="summaryDone" type="button">Finish Session</button>
+        </div>
+        <p class="small" id="copyStatus" aria-live="polite"></p>
       </div>
     </section>
 
@@ -969,6 +1097,7 @@
     let questionIndex = 0;
     let flowQuestions = [statusQuestion];
     let currentAnswers = {};
+    let currentSummaryEntryId = null;
     let selectedArmor = "Belt of Truth";
 
     const $ = (selector) => document.querySelector(selector);
@@ -1018,7 +1147,7 @@
       $("#questionText").textContent = q.text;
       $("#validationMessage").textContent = "";
       $("#backQuestion").disabled = questionIndex === 0;
-      $("#nextQuestion").textContent = questionIndex === flowQuestions.length - 1 ? "Finish" : "Next";
+      $("#nextQuestion").textContent = questionIndex > 0 && questionIndex === flowQuestions.length - 1 ? "Finish" : "Next";
       const slot = $("#answerSlot");
       slot.innerHTML = "";
 
@@ -1117,14 +1246,16 @@
         createdAt: new Date().toISOString(),
         type: currentAnswers.flowType || (watchedPorn ? "Reactive" : "Proactive"),
         watchedPorn,
-        answers: currentAnswers
+        answers: currentAnswers,
+        summary: buildSessionSummary(currentAnswers, watchedPorn)
       };
       state.entries.unshift(entry);
       if (watchedPorn) createCheckInReminder(entry);
       if (currentAnswers.armor?.[0]) selectedArmor = currentAnswers.armor[0];
+      currentSummaryEntryId = entry.id;
       save();
       setArmor(selectedArmor);
-      navigate(watchedPorn ? "buddiesView" : "armorView");
+      navigate("summaryView");
     }
 
     function createCheckInReminder(entry) {
@@ -1137,6 +1268,109 @@
         title: "Daily buddy check-in",
         note: "Check in with one battle buddy each day after this reactive entry."
       });
+    }
+
+    function buildSessionSummary(answers, watchedPorn) {
+      const flowType = watchedPorn ? "Reactive" : "Proactive";
+      const responses = watchedPorn ? [
+        summaryResponse("Path", "Reactive - after a relapse"),
+        summaryResponse("Immediate safety", answers.safety),
+        summaryResponse("Trigger", answers.trigger),
+        summaryResponse("Current emotion", answers.body),
+        summaryResponse("Next 60 seconds", answers.sixty),
+        summaryResponse("Accountability action", answers.step)
+      ] : [
+        summaryResponse("Path", "Proactive - fighting an urge"),
+        summaryResponse("Urge level", answers.urge ? `${answers.urge} / 10` : ""),
+        summaryResponse("Immediate risk", answers.risk),
+        summaryResponse("Body / emotion", answers.body),
+        summaryResponse("Long-term pressure", answers.pressure),
+        summaryResponse("Weak armor", answers.armor),
+        summaryResponse("Next faithful step", answers.step)
+      ];
+      const readings = recommendReadings(answers, watchedPorn);
+      const prayer = buildPrayer(answers, watchedPorn);
+      const actionTexts = buildRecommendedActions(answers, watchedPorn, readings);
+
+      return {
+        createdAt: new Date().toISOString(),
+        flowType,
+        responses: responses.filter(Boolean),
+        readings,
+        prayer,
+        actions: actionTexts.map((text) => ({ id: crypto.randomUUID(), text, done: false }))
+      };
+    }
+
+    function summaryResponse(label, value) {
+      const text = answerText(value);
+      return text ? { label, value: text } : null;
+    }
+
+    function answerText(value) {
+      return Array.isArray(value) ? value.join(", ") : String(value || "").trim();
+    }
+
+    function hasAnswer(value, expected) {
+      return answerValues(value).includes(expected);
+    }
+
+    function recommendReadings(answers, watchedPorn) {
+      const readings = [];
+      const add = (reference, reason) => {
+        if (!readings.some((item) => item.reference === reference)) readings.push({ reference, reason });
+      };
+
+      if (watchedPorn) {
+        add("Romans 8:1", "Begin with grace rather than condemnation.");
+        add("James 5:16", "Bring the relapse into honest, healing accountability.");
+        if (hasAnswer(answers.trigger, "High anxiety")) add("Philippians 4:6-8", "Redirect anxiety through prayer and truthful attention.");
+        else if (hasAnswer(answers.trigger, "Marital conflict")) add("Ephesians 4:26-32", "Face conflict without bitterness, concealment, or escape.");
+        else if (hasAnswer(answers.trigger, "Boredom")) add("Colossians 3:1-3", "Set your attention on what gives life and direction.");
+        else if (hasAnswer(answers.trigger, "Loneliness")) add("Psalm 34:17-18", "Remember God’s nearness in loneliness and pain.");
+        else add("Psalm 51:10-12", "Ask for renewal, steadiness, and restored joy.");
+      } else {
+        add("1 Corinthians 10:13", "Look for the available way of escape.");
+        if (hasAnswer(answers.body, "Stressed") || hasAnswer(answers.pressure, "Money")) add("Matthew 6:25-34", "Return attention from tomorrow’s pressure to today’s faithful action.");
+        else if (hasAnswer(answers.body, "Lonely") || hasAnswer(answers.pressure, "Isolation")) add("Ecclesiastes 4:9-10", "Move toward trusted people rather than isolation.");
+        else if (hasAnswer(answers.pressure, "Marriage")) add("Ephesians 4:2-3", "Choose patience, humility, and repair over escape.");
+        else add("2 Timothy 2:22", "Flee the immediate trigger and pursue what strengthens faith.");
+        if (answerValues(answers.armor).length) add("Ephesians 6:10-18", "Stand deliberately in the full armor of God.");
+      }
+
+      return readings.slice(0, 3);
+    }
+
+    function buildPrayer(answers, watchedPorn) {
+      const step = answerText(answers.step).toLowerCase() || "take the next honest step";
+      if (watchedPorn) {
+        const emotion = answerValues(answers.body)[0]?.toLowerCase() || "what I am feeling";
+        return `Father, thank You that I do not have to hide from You. I confess this relapse and receive Your mercy rather than condemnation. Meet me in ${emotion}, give me courage to ${step}, and help me walk in the light with the people You have placed around me. Renew my mind and lead me in truth. Amen.`;
+      }
+      const pressure = answerValues(answers.pressure)[0]?.toLowerCase() || "the pressure beneath this urge";
+      return `Father, You see this urge and ${pressure}. Give me clarity to reject escape, courage to ${step}, and strength to choose what is true and life-giving. Guard my mind, direct my body toward safety, and help me receive support instead of isolating. Amen.`;
+    }
+
+    function buildRecommendedActions(answers, watchedPorn, readings) {
+      const actions = [];
+      const add = (text) => {
+        if (text && !actions.includes(text)) actions.push(text);
+      };
+
+      if (watchedPorn) {
+        if (answerText(answers.safety).startsWith("Not yet")) add("Close the content and move the device to a safer place.");
+        add(answerText(answers.step));
+        if (!/battle buddy|spouse|pastor|sponsor/i.test(answerText(answers.step))) add("Contact a battle buddy and clearly name the relapse.");
+        add(`Read ${readings.map((item) => item.reference).join(" and ")}.`);
+        add("Return later for the deeper circles and armor reflection.");
+      } else {
+        answerValues(answers.step).forEach(add);
+        if (!hasAnswer(answers.step, "Leave the room") && !hasAnswer(answers.step, "Take a walk")) add("Move to a safer or shared environment.");
+        add(`Read ${readings.map((item) => item.reference).join(" and ")}.`);
+        add("Reassess the urge after ten minutes.");
+      }
+
+      return actions.slice(0, 4);
     }
 
     function setArmor(piece) {
@@ -1211,6 +1445,120 @@
       renderBuddies();
       renderJournals();
       renderHistory();
+      renderCurrentSummary();
+    }
+
+    function renderCurrentSummary() {
+      if (!currentSummaryEntryId) return;
+      const entry = state.entries.find((item) => item.id === currentSummaryEntryId);
+      if (!entry) return;
+      const watchedPorn = entry.watchedPorn ?? entry.answers.status === "Yes - I watched porn";
+      if (!entry.summary) entry.summary = buildSessionSummary(entry.answers, watchedPorn);
+      const summary = entry.summary;
+      const reactive = summary.flowType === "Reactive";
+
+      $("#summaryMode").textContent = `${summary.flowType} session`;
+      $("#summaryMode").classList.toggle("reactive", reactive);
+      $("#summaryIntro").textContent = reactive
+        ? "Grace first. Bring this into the light and take the next honest step."
+        : "Hold onto what is true and act on the clearest way of escape.";
+      $("#summaryPrimary").textContent = reactive ? "Reach Out Now" : "Continue to Armor Check";
+      $("#copyStatus").textContent = "";
+
+      $("#summaryResponses").innerHTML = summary.responses.map((item) => `
+        <div class="detail-item">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </div>
+      `).join("");
+
+      $("#summaryReadings").innerHTML = summary.readings.map((item) => `
+        <div class="reading-item">
+          <strong>${escapeHtml(item.reference)}</strong>
+          <span>${escapeHtml(item.reason)}</span>
+        </div>
+      `).join("");
+
+      $("#summaryPrayer").textContent = summary.prayer;
+      $("#summaryActions").innerHTML = summary.actions.map((action) => `
+        <label class="action-check">
+          <input type="checkbox" data-summary-action="${action.id}" ${action.done ? "checked" : ""}>
+          <span>${escapeHtml(action.text)}</span>
+        </label>
+      `).join("");
+
+      $$("[data-summary-action]").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          const action = summary.actions.find((item) => item.id === checkbox.dataset.summaryAction);
+          if (!action) return;
+          action.done = checkbox.checked;
+          save();
+        });
+      });
+    }
+
+    function openSavedSummary(entryId) {
+      const entry = state.entries.find((item) => item.id === entryId);
+      if (!entry) return;
+      if (!entry.summary) {
+        const watchedPorn = entry.watchedPorn ?? entry.answers.status === "Yes - I watched porn";
+        entry.summary = buildSessionSummary(entry.answers, watchedPorn);
+        save();
+      }
+      currentSummaryEntryId = entry.id;
+      navigate("summaryView");
+    }
+
+    function currentSummaryEntry() {
+      return state.entries.find((item) => item.id === currentSummaryEntryId);
+    }
+
+    function summaryAsText(entry) {
+      const summary = entry.summary;
+      return [
+        `Battle Plan - ${summary.flowType} Session`,
+        formatDate(entry.createdAt),
+        "",
+        "WHAT I IDENTIFIED",
+        ...summary.responses.map((item) => `${item.label}: ${item.value}`),
+        "",
+        "RECOMMENDED BIBLE READING",
+        ...summary.readings.map((item) => `${item.reference} - ${item.reason}`),
+        "",
+        "PRAYER",
+        summary.prayer,
+        "",
+        "NEXT ACTIONS",
+        ...summary.actions.map((action) => `${action.done ? "[x]" : "[ ]"} ${action.text}`)
+      ].join("\n");
+    }
+
+    async function copyCurrentSummary() {
+      const entry = currentSummaryEntry();
+      if (!entry?.summary) return;
+      const text = summaryAsText(entry);
+      try {
+        await navigator.clipboard.writeText(text);
+        $("#copyStatus").textContent = "Summary copied.";
+      } catch {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        $("#copyStatus").textContent = copied ? "Summary copied." : "Copy was not available on this device.";
+      }
+    }
+
+    function runSummaryPrimaryAction() {
+      const entry = currentSummaryEntry();
+      if (!entry) return;
+      const watchedPorn = entry.watchedPorn ?? entry.answers.status === "Yes - I watched porn";
+      if (watchedPorn) openSos();
+      else navigate("armorView");
     }
 
     function formatDate(value) {
@@ -1343,9 +1691,13 @@
               <div class="detail-item"><span>Accountability</span><strong>${watchedPorn ? "Watched porn today" : "Fighting the urge"}</strong></div>
               ${details}
             </div>
+            <button class="link-button history-summary" type="button" data-view-summary="${entry.id}">View Summary</button>
           </article>
         `;
       }).join("");
+      $$("[data-view-summary]").forEach((button) => {
+        button.addEventListener("click", () => openSavedSummary(button.dataset.viewSummary));
+      });
     }
 
     function answerDetail(label, value) {
@@ -1391,6 +1743,9 @@
     $$(".armor-hotspot").forEach((button) => button.addEventListener("click", () => setArmor(button.dataset.armor)));
     $("#journalArmor").addEventListener("click", openArmorJournal);
     $("#saveJournal").addEventListener("click", saveJournal);
+    $("#summaryPrimary").addEventListener("click", runSummaryPrimaryAction);
+    $("#copySummary").addEventListener("click", copyCurrentSummary);
+    $("#summaryDone").addEventListener("click", () => navigate("homeView"));
     setArmor(selectedArmor);
     render();
 
